@@ -1,72 +1,76 @@
-name: Publish documentation to the project page
-
-on:
-  push:
-    branches: [ 1.x, release ]
-
 jobs:
   publish:
     if: github.repository == 'jdbc-observations/datasource-proxy'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up code
-        uses: actions/setup-java@v3
-        with:
-          java-version: 8
-          distribution: temurin
+    - continue-on-error: true
+      uses: actions/checkout@v3
+    - continue-on-error: true
+      name: Set up code
+      uses: actions/setup-java@v3
+      with:
+        distribution: temurin
+        java-version: 8
+    - continue-on-error: true
+      name: Get project version
+      run: 'VERSION=$( ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout
+        )
 
-      - name: Get project version
-        run: |
-            VERSION=$( ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout )
-            echo "project_version=$VERSION" >> $GITHUB_ENV
+        echo "project_version=$VERSION" >> $GITHUB_ENV
 
-      - name: Process asciidoc and javadoc
-        run: ./mvnw -Ppublish-doc asciidoctor:process-asciidoc@output-html javadoc:javadoc
+        '
+    - continue-on-error: true
+      name: Process asciidoc and javadoc
+      run: ./mvnw -Ppublish-doc asciidoctor:process-asciidoc@output-html javadoc:javadoc
+    - continue-on-error: true
+      if: github.ref == 'refs/heads/1.x' && contains(env.project_version, 'snapshot')
+      name: Prepare "snapshot" documents
+      run: 'mkdir -p target/deploy-documents/snapshot/user-guide/
 
-        #
-        # construct a directory to be copied to "gh-pages" branch
-        #    target/deploy-documents/             -- map to "docs" dir in "gh-pages"
-        #                 `-- <PROJECT_VERSION>   -- e.g. "1.7", "1.8-SNAPSHOT"
-        #                       `-- user-guide/
-        #                       `-- api/
-        #                 `-- snapshot            -- for latest snapshot from main
-        #                       `-- user-guide/
-        #                       `-- api/
-        #                 `-- current             -- for latest release version
-        #                       `-- user-guide/
-        #                       `-- api/
+        mkdir -p target/deploy-documents/snapshot/api/
 
-      - name: Prepare "snapshot" documents
-        if: "github.ref == 'refs/heads/1.x' && contains(env.project_version, 'snapshot')"
-        run: |
-          mkdir -p target/deploy-documents/snapshot/user-guide/
-          mkdir -p target/deploy-documents/snapshot/api/
-          cp -Rf target/generated-docs/index.html target/deploy-documents/snapshot/user-guide/
-          cp -Rf target/site/apidocs/* target/deploy-documents/snapshot/api/
+        cp -Rf target/generated-docs/index.html target/deploy-documents/snapshot/user-guide/
 
-      - name: Prepare "project-version" documents
-        run: |
-          mkdir -p target/deploy-documents/${{ env.project_version }}/user-guide/
-          mkdir -p target/deploy-documents/${{ env.project_version }}/api/
-          cp -Rf target/generated-docs/* target/deploy-documents/${{ env.project_version }}/user-guide/
-          cp -Rf target/site/apidocs/* target/deploy-documents/${{ env.project_version }}/api/
+        cp -Rf target/site/apidocs/* target/deploy-documents/snapshot/api/
 
-      - name: Prepare "current" documents
-        if: "github.ref == 'refs/heads/release'"
-        run: |
-          mkdir -p target/deploy-documents/current/user-guide/
-          mkdir -p target/deploy-documents/current/api/
-          cp -Rf target/generated-docs/index.html target/deploy-documents/current/user-guide/
-          cp -Rf target/site/apidocs/* target/deploy-documents/current/api/
+        '
+    - continue-on-error: true
+      name: Prepare "project-version" documents
+      run: 'mkdir -p target/deploy-documents/${{ env.project_version }}/user-guide/
 
+        mkdir -p target/deploy-documents/${{ env.project_version }}/api/
 
-      - name: Deploy documents
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: target/deploy-documents
-          destination_dir: docs
-          keep_files: true
-          full_commit_message: "Deploying documents(${{ env.project_version}}) to ${{ github.ref }} from ${{ github.repository }}@${{ github.sha }}"
+        cp -Rf target/generated-docs/* target/deploy-documents/${{ env.project_version
+        }}/user-guide/
+
+        cp -Rf target/site/apidocs/* target/deploy-documents/${{ env.project_version
+        }}/api/
+
+        '
+    - continue-on-error: true
+      if: github.ref == 'refs/heads/release'
+      name: Prepare "current" documents
+      run: 'mkdir -p target/deploy-documents/current/user-guide/
+
+        mkdir -p target/deploy-documents/current/api/
+
+        cp -Rf target/generated-docs/index.html target/deploy-documents/current/user-guide/
+
+        cp -Rf target/site/apidocs/* target/deploy-documents/current/api/
+
+        '
+    - continue-on-error: true
+      name: Deploy documents
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        destination_dir: docs
+        full_commit_message: Deploying documents(${{ env.project_version}}) to ${{
+          github.ref }} from ${{ github.repository }}@${{ github.sha }}
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        keep_files: true
+        publish_branch: gh-pages
+        publish_dir: target/deploy-documents
+name: Publish documentation to the project page
+on:
+  repository_dispatch:
+    types: trigger-ga___publish-docs.yml
